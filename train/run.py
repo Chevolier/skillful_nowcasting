@@ -117,11 +117,13 @@ def extract_input_and_target_frames(radar_frames):
 
 
 class TFDataset(torch.utils.data.dataset.Dataset):
-    def __init__(self, split):
+    def __init__(self, data_path, split):
         super().__init__()
-        self.reader = load_dataset(
-            "openclimatefix/nimrod-uk-1km", "sample", split=split, streaming=True
-        )
+        # self.reader = load_dataset(
+        #     "openclimatefix/nimrod-uk-1km", "sample", split=split, streaming=True
+        # )
+        self.reader = load_dataset(data_path, split=split)
+        
         self.iter_reader = self.reader
 
     def __len__(self):
@@ -161,6 +163,7 @@ class DGMRDataModule(LightningDataModule):
         self,
         num_workers: int = 1,
         pin_memory: bool = True,
+        data_path: str=''
     ):
         """
         fake_data: random data is created and used instead. This is useful for testing
@@ -179,15 +182,15 @@ class DGMRDataModule(LightningDataModule):
             # returns complete batches.
             batch_size=None,
         )
+        
+        self.data_path = data_path
 
     def train_dataloader(self):
-        dataloader = DataLoader(TFDataset(split="train"), batch_size=12, num_workers=6)
+        dataloader = DataLoader(TFDataset(data_path, split="train"), batch_size=12, num_workers=6)
         return dataloader
 
     def val_dataloader(self):
-        train_dataset = TFDataset(
-            split="validation",
-        )
+        train_dataset = TFDataset(data_path, split="validation",)
         dataloader = DataLoader(train_dataset, batch_size=6, num_workers=6)
         return dataloader
 
@@ -208,5 +211,6 @@ trainer = Trainer(
     # accelerator="tpu", devices=8
 )
 model = DGMR()
-datamodule = DGMRDataModule()
+data_path = "/home/ec2-user/SageMaker/efs/Projects/skillful_nowcasting/data/nimrod-uk-1km"
+datamodule = DGMRDataModule(data_path)
 trainer.fit(model, datamodule)
