@@ -1,8 +1,11 @@
 antialiased_cnns
 pytorch_msssim
-numpy
-pytorch_lightning
+numpy==1.23.4
+pytorch_lightning==2.2.3
 einops
 huggingface_hub==0.15.0
 pytest
 datasets==1.18.4
+tensorflow==2.10.0
+tensorflow-estimator==2.10.0
+wandb
