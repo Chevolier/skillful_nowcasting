@@ -133,3 +133,5 @@ wandb/
 tests/lightning_logs/
 .ipynb_checkpoints/
 *.ckpt
+lightning_logs/
+.DS_Store
