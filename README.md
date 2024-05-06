@@ -13,9 +13,12 @@ The default parameters match what is written in the paper.
 
 Clone the repository, then run
 ```shell
-conda create -n dgmr python=3.8 
+conda create -n dgmr python=3.10
 
-pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
+python3 -m pip install tensorflow[and-cuda]
+# Verify the installation:
+python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+
 pip install -r requirements.txt
 pip install -e .
 ````
