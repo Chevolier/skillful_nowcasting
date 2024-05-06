@@ -324,7 +324,10 @@ def test_train_dgmr():
     train_loader = torch.utils.data.DataLoader(DS(), batch_size=1)
     val_loader = torch.utils.data.DataLoader(DS(), batch_size=1)
 
-    trainer = Trainer(accelerator="cpu", max_epochs=1)
+    trainer = Trainer(accelerator="gpu", max_epochs=1)
     model = DGMR(forecast_steps=forecast_steps)
 
     trainer.fit(model, train_loader, val_loader)
+
+if __name__ == "__main__":
+    test_train_dgmr()

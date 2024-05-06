@@ -9,7 +9,8 @@ from torch.utils.data import DataLoader
 
 from dgmr import DGMR
 
-wandb.init(project="dgmr")
+# wandb.init(project="dgmr")
+wandb.init(mode="disabled")
 from pathlib import Path
 
 import numpy as np
@@ -105,7 +106,7 @@ class UploadCheckpointsAsArtifact(Callback):
 
 
 NUM_INPUT_FRAMES = 4
-NUM_TARGET_FRAMES = 18
+NUM_TARGET_FRAMES = 2
 
 
 def extract_input_and_target_frames(radar_frames):
@@ -122,12 +123,13 @@ class TFDataset(torch.utils.data.dataset.Dataset):
         # self.reader = load_dataset(
         #     "openclimatefix/nimrod-uk-1km", "sample", split=split, streaming=True
         # )
-        self.reader = load_dataset(data_path, split=split)
+        self.reader = load_dataset(data_path, split=split, streaming=True)
         
         self.iter_reader = self.reader
 
     def __len__(self):
         return 1000
+        # return len(self.reader)
 
     def __getitem__(self, item):
         try:
@@ -138,6 +140,9 @@ class TFDataset(torch.utils.data.dataset.Dataset):
                 self.reader.shuffle(seed=rng.integers(low=0, high=100000), buffer_size=1000)
             )
             row = next(self.iter_reader)
+        
+        # row = self.reader[item]
+        
         input_frames, target_frames = extract_input_and_target_frames(row["radar_frames"])
         return np.moveaxis(input_frames, [0, 1, 2, 3], [0, 2, 3, 1]), np.moveaxis(
             target_frames, [0, 1, 2, 3], [0, 2, 3, 1]
@@ -162,7 +167,7 @@ class DGMRDataModule(LightningDataModule):
     def __init__(
         self,
         num_workers: int = 1,
-        pin_memory: bool = True,
+        pin_memory: bool = False,
         data_path: str=''
     ):
         """
@@ -186,12 +191,12 @@ class DGMRDataModule(LightningDataModule):
         self.data_path = data_path
 
     def train_dataloader(self):
-        dataloader = DataLoader(TFDataset(data_path, split="train"), batch_size=12, num_workers=6)
+        dataloader = DataLoader(TFDataset(data_path, split="train"), batch_size=1, num_workers=1)
         return dataloader
 
     def val_dataloader(self):
-        train_dataset = TFDataset(data_path, split="validation",)
-        dataloader = DataLoader(train_dataset, batch_size=6, num_workers=6)
+        valid_dataset = TFDataset(data_path, split="validation")
+        dataloader = DataLoader(valid_dataset, batch_size=1, num_workers=1)
         return dataloader
 
 
@@ -203,14 +208,14 @@ model_checkpoint = ModelCheckpoint(
 )
 
 trainer = Trainer(
-    max_epochs=1000,
+    max_epochs=1,
     logger=wandb_logger,
     callbacks=[model_checkpoint],
-    accelerator="auto",
+    accelerator="gpu",  # "auto"
     precision=32,
     # accelerator="tpu", devices=8
 )
-model = DGMR()
+model = DGMR(forecast_steps=2, generation_steps=2)
 data_path = "/home/ec2-user/SageMaker/efs/Projects/skillful_nowcasting/data/nimrod-uk-1km"
 datamodule = DGMRDataModule(data_path)
 trainer.fit(model, datamodule)
