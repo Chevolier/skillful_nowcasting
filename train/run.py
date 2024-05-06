@@ -106,8 +106,7 @@ class UploadCheckpointsAsArtifact(Callback):
 
 
 NUM_INPUT_FRAMES = 4
-NUM_TARGET_FRAMES = 2
-
+NUM_TARGET_FRAMES = 8
 
 def extract_input_and_target_frames(radar_frames):
     """Extract input and target frames from a dataset row's radar_frames."""
@@ -115,7 +114,6 @@ def extract_input_and_target_frames(radar_frames):
     input_frames = radar_frames[-NUM_TARGET_FRAMES - NUM_INPUT_FRAMES : -NUM_TARGET_FRAMES]
     target_frames = radar_frames[-NUM_TARGET_FRAMES:]
     return input_frames, target_frames
-
 
 class TFDataset(torch.utils.data.dataset.Dataset):
     def __init__(self, data_path, split):
@@ -128,7 +126,7 @@ class TFDataset(torch.utils.data.dataset.Dataset):
         self.iter_reader = self.reader
 
     def __len__(self):
-        return 1000
+        return 10
         # return len(self.reader)
 
     def __getitem__(self, item):
@@ -137,7 +135,7 @@ class TFDataset(torch.utils.data.dataset.Dataset):
         except Exception:
             rng = default_rng()
             self.iter_reader = iter(
-                self.reader.shuffle(seed=rng.integers(low=0, high=100000), buffer_size=1000)
+                self.reader.shuffle(seed=rng.integers(low=0, high=100000), buffer_size=100)
             )
             row = next(self.iter_reader)
         
@@ -191,19 +189,19 @@ class DGMRDataModule(LightningDataModule):
         self.data_path = data_path
 
     def train_dataloader(self):
-        dataloader = DataLoader(TFDataset(data_path, split="train"), batch_size=1, num_workers=1)
+        dataloader = DataLoader(TFDataset(data_path, split="train"), batch_size=1, num_workers=0) 
         return dataloader
 
     def val_dataloader(self):
         valid_dataset = TFDataset(data_path, split="validation")
-        dataloader = DataLoader(valid_dataset, batch_size=1, num_workers=1)
+        dataloader = DataLoader(valid_dataset, batch_size=1, num_workers=0)
         return dataloader
 
 
 wandb_logger = WandbLogger(logger="dgmr")
 model_checkpoint = ModelCheckpoint(
     monitor="train/g_loss",
-    dirpath="./",
+    dirpath="checkpoint",
     filename="best",
 )
 
@@ -212,10 +210,11 @@ trainer = Trainer(
     logger=wandb_logger,
     callbacks=[model_checkpoint],
     accelerator="gpu",  # "auto"
-    precision=32,
+    # precision=32,
     # accelerator="tpu", devices=8
 )
-model = DGMR(forecast_steps=2, generation_steps=2)
+model = DGMR(forecast_steps=NUM_TARGET_FRAMES, generation_steps=6)
 data_path = "/home/ec2-user/SageMaker/efs/Projects/skillful_nowcasting/data/nimrod-uk-1km"
+
 datamodule = DGMRDataModule(data_path)
 trainer.fit(model, datamodule)

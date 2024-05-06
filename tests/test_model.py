@@ -309,11 +309,12 @@ def test_load_dgmr_from_hf():
 
 @pytest.mark.skip("Takes too long")
 def test_train_dgmr():
-    forecast_steps = 8
+    forecast_steps = 12
+    output_shape = 128
 
     class DS(torch.utils.data.Dataset):
-        def __init__(self, bs=2):
-            self.ds = torch.rand((bs, forecast_steps + 4, 1, 256, 256))
+        def __init__(self, bs=4):
+            self.ds = torch.rand((bs, forecast_steps + 4, 1, output_shape, output_shape))
 
         def __len__(self):
             return len(self.ds)
@@ -325,9 +326,36 @@ def test_train_dgmr():
     val_loader = torch.utils.data.DataLoader(DS(), batch_size=1)
 
     trainer = Trainer(accelerator="gpu", max_epochs=1)
-    model = DGMR(forecast_steps=forecast_steps)
+    model = DGMR(forecast_steps=forecast_steps, output_shape=output_shape)
 
     trainer.fit(model, train_loader, val_loader)
 
 if __name__ == "__main__":
+    
+#     test_dblock()
+    
+#     test_gblock()
+    
+#     test_conv_gru_cell()
+    
+#     test_conv_gru()
+    
+#     test_latent_conditioning_stack()
+    
+#     test_context_conditioning_stack()
+        
+#     test_temporal_discriminator()
+    
+#     test_spatial_discriminator()
+    
+#     test_discriminator()
+    
+#     test_sampler()
+    
+#     test_generator()
+    
+#     test_nowcasting_gan_creation()
+    
+#     test_nowcasting_gan_backward()
+    
     test_train_dgmr()
