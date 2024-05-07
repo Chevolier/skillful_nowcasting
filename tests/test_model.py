@@ -325,7 +325,7 @@ def test_train_dgmr():
     train_loader = torch.utils.data.DataLoader(DS(), batch_size=1)
     val_loader = torch.utils.data.DataLoader(DS(), batch_size=1)
 
-    trainer = Trainer(accelerator="gpu", max_epochs=1)
+    trainer = Trainer(accelerator="gpu", max_epochs=1, precision="16-mixed")
     model = DGMR(forecast_steps=forecast_steps, output_shape=output_shape)
 
     trainer.fit(model, train_loader, val_loader)

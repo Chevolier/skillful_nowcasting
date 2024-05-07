@@ -19,6 +19,8 @@ python3 -m pip install tensorflow[and-cuda]
 # Verify the installation:
 python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
+pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
+
 pip install -r requirements.txt
 pip install -e .
 ````

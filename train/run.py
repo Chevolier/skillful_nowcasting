@@ -106,7 +106,7 @@ class UploadCheckpointsAsArtifact(Callback):
 
 
 NUM_INPUT_FRAMES = 4
-NUM_TARGET_FRAMES = 8
+NUM_TARGET_FRAMES = 18
 
 def extract_input_and_target_frames(radar_frames):
     """Extract input and target frames from a dataset row's radar_frames."""
@@ -165,7 +165,7 @@ class DGMRDataModule(LightningDataModule):
     def __init__(
         self,
         num_workers: int = 1,
-        pin_memory: bool = False,
+        pin_memory: bool = True,
         data_path: str=''
     ):
         """
@@ -189,7 +189,8 @@ class DGMRDataModule(LightningDataModule):
         self.data_path = data_path
 
     def train_dataloader(self):
-        dataloader = DataLoader(TFDataset(data_path, split="train"), batch_size=1, num_workers=0) 
+        train_dataset = TFDataset(data_path, split="train")
+        dataloader = DataLoader(train_dataset, batch_size=1, num_workers=0) 
         return dataloader
 
     def val_dataloader(self):
@@ -210,8 +211,9 @@ trainer = Trainer(
     logger=wandb_logger,
     callbacks=[model_checkpoint],
     accelerator="gpu",  # "auto"
-    # precision=32,
-    # accelerator="tpu", devices=8
+    devices=1,
+    precision="bf16-mixed",  # "16-mixed"
+    # strategy="ddp" # "ddp"
 )
 model = DGMR(forecast_steps=NUM_TARGET_FRAMES, generation_steps=6)
 data_path = "/home/ec2-user/SageMaker/efs/Projects/skillful_nowcasting/data/nimrod-uk-1km"
