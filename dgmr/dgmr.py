@@ -59,6 +59,7 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
             pretrained:
         """
         super().__init__()
+        
         config = locals()
         config.pop("__class__")
         config.pop("self")
@@ -298,3 +299,8 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
             tensorboard.add_image(
                 f"{step}/Generated_Image_Frame_{i}", image_grid, global_step=batch_idx
             )
+    
+    # def on_after_backward(self):
+    #     for name, param in self.named_parameters():
+    #         if param.grad is None:
+    #             print(name)
