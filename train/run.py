@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader
 
 from dgmr import DGMR
 
-# wandb.init(project="dgmr")
-wandb.init(mode="disabled")
+wandb.init(project="dgmr")
+# wandb.init(mode="disabled")
 from pathlib import Path
 
 import numpy as np
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     train_dataloader_len=train_dataset_len//(args.train_batch_size)
     
     valid_dataset = load_dataset("webdataset", 
-                    data_files={"valid": os.path.join(args.valid_data_dir,"000000.tar")}, 
+                    data_files={"valid": os.path.join(args.valid_data_dir,"*.tar")}, 
                     split="valid", 
                     streaming=True)
     
