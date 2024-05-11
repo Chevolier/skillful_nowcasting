@@ -1,6 +1,7 @@
-python train/run.py --pretrained_model_path models/dgmr \
-                    --train_data_dir data/zuimei-radar-cropped \
-                    --valid_data_dir data/zuimei-radar-cropped \
+python -u train/run.py --pretrained_model_path models/dgmr \
+                    --train_data_dir data/zuimei-radar-cropped/train \
+                    --valid_data_dir data/zuimei-radar-cropped/valid \
+                    --output_dir checkpoint/dgmr_forecast20_ep2 \
                     --mixed_precision 16-mixed \
                     --accelerator_device gpu \
                     --num_devices 4 \

@@ -1,10 +1,18 @@
-import numpy as np
 import zipfile
 import os
 import re
 from functools import cmp_to_key
 from datetime import datetime, timedelta
-import tqdm
+from PIL import Image
+import json
+import random
+# import pickle
+import webdataset as wds
+import numpy as np
+from tqdm import tqdm
+import pandas as pd
+import time
+import uuid
 
 data_dir = "data/zuimei-radar"
 
@@ -116,10 +124,11 @@ def read_data(file_path):
 data = read_data(file_paths[0])
 print(type(data), data.shape)
 
+count = sum([1 for period in periods if len(period)>=24])
 
-import numpy as np
-from tqdm import tqdm
-import time
+lens = [len(period) for period in periods if len(period)>=0]
+print(count)
+print(lens)
 
 def read_data(file_path):
     # Open the ZIP file
@@ -261,105 +270,73 @@ def crop_frames(frames, crop_size=256, num_thr=100):
     return cropped_result
 
 
-examples = []
-
 crop_size = 256
 num_thr = 2000 # for random cropping, ensure that the cropped area has at least this number of elements are nonzero
 
-num_periods = 100
+num_periods = 3000
 num_total_frames = 24
-
-for period in tqdm(periods[:num_periods]):
-    if len(period) < num_total_frames:
-        continue
-    
-    start_reading = time.time()
-    print(f"Start reading {len(period)} frames ...")
-    period_frames = read_frames(period)
-    end_reading = time.time()
-    time_cost_reading = end_reading - start_reading
-    print(f"End reading {len(period)} frames, time cost: {time_cost_reading:.2f}s.")
-    
-    freq_update_crop_region = 240 # change crop regions every 24 hours, 240 * 6 min
-    
-    frame_result = {"max_pos": (0, 0), "valid_positions": [(0, 0)]}
-    
-    print("Start croppping")
-    num_examples = len(period) - num_total_frames + 1
-    for idx in tqdm(range(num_examples)):
-        frames = period_frames[idx:idx+num_total_frames]
-        
-        if idx % freq_update_crop_region == 0:
-            frame_result = crop_image(frames[0], crop_size, num_thr)
-        
-        max_pos = frame_result['max_pos']
-        cropped_frames_max_nonzero = frames[:,max_pos[0]:max_pos[0]+crop_size, max_pos[1]:max_pos[1]+crop_size]
-
-        random_idx = np.random.choice(len(frame_result["valid_positions"]))
-        random_pos = frame_result["valid_positions"][random_idx]
-        cropped_frames_random= frames[:,random_pos[0]:random_pos[0]+crop_size, random_pos[1]:random_pos[1]+crop_size]
-        
-        frame_start_time = get_time_from_path(period[idx], 'str')
-        
-        cropped_result = {
-            "cropped_frames_max_nonzero": cropped_frames_max_nonzero,
-            "max_pos": max_pos,
-            "cropped_frames_random": cropped_frames_random,
-            "random_pos": random_pos,
-            "start_time": frame_start_time
-        }
-        
-        examples.append(cropped_result)
-    
-    end_crop = time.time()
-    time_cost_crop = end_crop - end_reading
-    print(f"End cropping {num_examples} frames, time cost: {time_cost_crop}s, average time cost: {time_cost_crop/num_examples:.2f}s")
-    
-import os
-from PIL import Image
-import json
-import random
-# import pickle
-import webdataset as wds
-import numpy as np
-
-from tqdm import tqdm
-
-import pandas as pd
-# pd.set_option('display.max_columns', None)
-# pd.set_option('display.max_colwidth', None)
 
 count = 0
 tar_id = 0
 num_per_tar = 10
 
-num_examples = len(examples) # 10 * num_per_tar
-# Create a WebDataset writer
-for i, example in tqdm(enumerate(examples[:num_examples]), total=num_examples):
+for period in tqdm(periods[:num_periods]):
+    if len(period) < num_total_frames:
+        continue
+            
+    sub_period_size = 240
     
-    # Define the output dataset directory
-    if count == 0:
-        output_dir = f"data/zuimei-radar-cropped/{tar_id:06d}.tar"
-        writer = wds.TarWriter(output_dir)
+    for sub_pid in range(0, len(period), sub_period_size):
+        start_reading = time.time()
+        print(f"Start reading {len(period)} frames ...")
+        period_frames = read_frames(period[sub_pid:sub_pid+sub_period_size])
+        end_reading = time.time()
+        time_cost_reading = end_reading - start_reading
+        print(f"End reading {len(period)} frames, time cost: {time_cost_reading:.2f}s.")
 
-    sample = {
-        "__key__": f"{i:08d}",
-        "cropped_frames_max_nonzero": example['cropped_frames_max_nonzero'].tobytes(),
-        "max_pos": np.array(example['max_pos'], dtype=np.float32).tobytes(),
-        "cropped_frames_random": example['cropped_frames_random'].tobytes(),
-        "random_pos": np.array(example['random_pos'], dtype=np.float32).tobytes(),
-        "start_time": example['start_time'].encode(),
-    }
+        print("Start croppping and saving")
+        frame_result = crop_image(period_frames[0], crop_size, num_thr)
+        num_examples = period_frames.shape[0] - num_total_frames + 1
+        for idx in tqdm(range(num_examples)):
+            frames = period_frames[idx:idx+num_total_frames]
 
-    # Write the sample to the dataset
-    writer.write(sample)
-    count += 1
+            max_pos = frame_result['max_pos']
+            cropped_frames_max_nonzero = frames[:,max_pos[0]:max_pos[0]+crop_size, max_pos[1]:max_pos[1]+crop_size]
+
+            random_idx = np.random.choice(len(frame_result["valid_positions"]))
+            random_pos = frame_result["valid_positions"][random_idx]
+            cropped_frames_random= frames[:,random_pos[0]:random_pos[0]+crop_size, random_pos[1]:random_pos[1]+crop_size]
+
+            frame_start_time = get_time_from_path(period[idx], 'str')
+            
+            # Define the output dataset directory
+            if count == 0:
+                output_dir = f"data/zuimei-radar-cropped/{tar_id:06d}.tar"
+                writer = wds.TarWriter(output_dir)
+
+            sample = {
+                "__key__": str(uuid.uuid4()),
+                "cropped_frames_max_nonzero": cropped_frames_max_nonzero.tobytes(),
+                "max_pos": np.array(max_pos, dtype=np.float32).tobytes(),
+                "cropped_frames_random": cropped_frames_random.tobytes(),
+                "random_pos": np.array(random_pos, dtype=np.float32).tobytes(),
+                "start_time": frame_start_time.encode(),
+            }
+
+            # Write the sample to the dataset
+            writer.write(sample)
+            count += 1
+
+            if count == num_per_tar:
+                # Close the writer
+                writer.close()
+                count = 0
+                tar_id += 1
     
-    if count == num_per_tar:
-        # Close the writer
-        writer.close()
-        count = 0
-        tar_id += 1
+        end_crop = time.time()
+        time_cost_crop = end_crop - end_reading
+        print(f"End cropping and saving {num_examples} frames, time cost: {time_cost_crop}s, average time cost: {time_cost_crop/num_examples:.2f}s")
+
 
 if count < num_per_tar:
     writer.close()
