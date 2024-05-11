@@ -18,5 +18,6 @@ python -u run.py --pretrained_model_path models/dgmr \
                     --strategy ddp \
                     --num_train_epochs 1 \
                     --dataloader_num_workers 8 \
+                    --checkpointing_steps 500
                     # --max_train_samples 100
         

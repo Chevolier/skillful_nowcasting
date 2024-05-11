@@ -334,6 +334,7 @@ if __name__ == "__main__":
         monitor="train/g_loss",
         dirpath=args.output_dir,
         filename="best",
+        every_n_train_steps=args.checkpointing_steps
     )
     
     train_dataset = load_dataset("webdataset", 

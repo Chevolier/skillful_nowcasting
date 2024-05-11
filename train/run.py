@@ -117,14 +117,6 @@ class UploadCheckpointsAsArtifact(Callback):
         experiment.log_artifact(ckpts)
 
 
-# def extract_input_and_target_frames(radar_frames):
-#     """Extract input and target frames from a dataset row's radar_frames."""
-#     # We align our targets to the end of the window, and inputs precede targets.
-#     input_frames = radar_frames[-NUM_FORECAST_FRAMES - NUM_INPUT_FRAMES : -NUM_FORECAST_FRAMES]
-#     target_frames = radar_frames[-NUM_FORECAST_FRAMES:]
-#     return input_frames, target_frames
-
-
 def revert_back_numpy_array(byte_array, size=(24, 256, 256), dtype=np.float32, source_dtype = np.float32):
     # Load the flattened data from disk
     flattened_data = bytearray(byte_array) 
@@ -167,67 +159,6 @@ def collate_fn(examples):
     
     return inputs_tensor, targets_tensor
 
-# from torch.utils.data import IterableDataset
-
-# class CustomDataset(IterableDataset):
-#     def __init__(self, data_path, split):
-#         self.dataset = load_dataset(data_path, split=split, streaming=True)
-
-#     def __iter__(self):
-#         worker_info = torch.utils.data.get_worker_info()
-#         if worker_info is None:
-#             # Single-process data loading
-#             for row in self.dataset:
-#                 input_frames, target_frames = extract_input_and_target_frames(row['radar_frames'])
-#                 yield np.moveaxis(input_frames, [0, 1, 2, 3], [0, 2, 3, 1]), np.moveaxis(
-#                     target_frames, [0, 1, 2, 3], [0, 2, 3, 1]
-#                 )
-#         else:
-#             # Multi-process data loading
-#             # Split the dataset based on the worker information
-#             num_workers = worker_info.num_workers
-#             worker_id = worker_info.id
-#             iter_start = worker_info.split[worker_id]
-#             iter_end = worker_info.split[worker_id + 1]
-
-#             for idx in range(iter_start, iter_end):
-#                 row = self.dataset[idx]
-#                 input_frames, target_frames = extract_input_and_target_frames(row['radar_frames'])
-#                 yield np.moveaxis(input_frames, [0, 1, 2, 3], [0, 2, 3, 1]), np.moveaxis(
-#                     target_frames, [0, 1, 2, 3], [0, 2, 3, 1]
-#                 )
-
-
-# class TFDataset(torch.utils.data.dataset.Dataset):
-#     def __init__(self, data_path, split):
-#         super().__init__()
-#         # self.reader = load_dataset(
-#         #     "openclimatefix/nimrod-uk-1km", "sample", split=split, streaming=True
-#         # )
-#         self.reader = load_dataset(data_path, split=split, streaming=True)
-        
-#         self.iter_reader = iter(self.reader)
-
-#     def __len__(self):
-#         return 10
-#         # return len(self.reader)
-
-#     def __getitem__(self, item):
-#         try:
-#             row = next(self.iter_reader)
-#         except Exception:
-#             rng = default_rng()
-#             self.iter_reader = iter(
-#                 self.reader.shuffle(seed=rng.integers(low=0, high=100000), buffer_size=10)
-#             )
-#             row = next(self.iter_reader)
-        
-#         # row = self.reader[item]
-        
-#         input_frames, target_frames = extract_input_and_target_frames(row["radar_frames"])
-#         return np.moveaxis(input_frames, [0, 1, 2, 3], [0, 2, 3, 1]), np.moveaxis(
-#             target_frames, [0, 1, 2, 3], [0, 2, 3, 1]
-#         )
 
 def count_distinct_files(folder_path):
     distinct_files = defaultdict(set)
@@ -243,56 +174,6 @@ def count_distinct_files(folder_path):
     return len(distinct_files)
     
     
-# class DGMRDataModule(LightningDataModule):
-#     """
-#     Example of LightningDataModule for NETCDF dataset.
-#     A DataModule implements 5 key methods:
-#         - prepare_data (things to do on 1 GPU/TPU, not on every GPU/TPU in distributed mode)
-#         - setup (things to do on every accelerator in distributed mode)
-#         - train_dataloader (the training dataloader)
-#         - val_dataloader (the validation dataloader(s))
-#         - test_dataloader (the test dataloader(s))
-#     This allows you to share a full dataset without explaining how to download,
-#     split, transform and process the data.
-#     Read the docs:
-#         https://pytorch-lightning.readthedocs.io/en/latest/extensions/datamodules.html
-#     """
-
-#     def __init__(
-#         self,
-#         num_workers: int = 1,
-#         pin_memory: bool = True,
-#         data_path: str=''
-#     ):
-#         """
-#         fake_data: random data is created and used instead. This is useful for testing
-#         """
-#         super().__init__()
-
-#         self.num_workers = num_workers
-#         self.pin_memory = pin_memory
-
-#         self.dataloader_config = dict(
-#             pin_memory=self.pin_memory,
-#             num_workers=self.num_workers,
-#             prefetch_factor=8,
-#             persistent_workers=True,
-#             # Disable automatic batching because dataset
-#             # returns complete batches.
-#             batch_size=1 # None,
-#         )
-        
-#         self.data_path = data_path
-
-#     def train_dataloader(self):
-#         train_dataset = TFDataset(data_path, split="train")
-#         dataloader = DataLoader(train_dataset, batch_size=1, num_workers=0) 
-#         return dataloader
-
-#     def val_dataloader(self):
-#         valid_dataset = TFDataset(data_path, split="validation")
-#         dataloader = DataLoader(valid_dataset, batch_size=1, num_workers=0)
-#         return dataloader
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a DGMR training script.")
@@ -335,6 +216,9 @@ def parse_args(input_args=None):
     # parser.add_argument(
     #     "--num_forecast_frames", type=int, default=18, help="Number of forecasted frames."
     # )
+    parser.add_argument(
+        "--generation_steps", type=int, default=6, help="Number of generation steps for optimizing generator, used for Monte-carlo simulations."
+    )
     parser.add_argument(
         "--mixed_precision",
         type=str,
@@ -445,14 +329,8 @@ if __name__ == "__main__":
         monitor="train/g_loss",
         dirpath=args.output_dir,
         filename="best",
+        every_n_train_steps=args.checkpointing_steps
     )
-
-    # data_path = "/home/ec2-user/SageMaker/efs/Projects/skillful_nowcasting/data/nimrod-uk-1km"
-
-    # datamodule = DGMRDataModule(data_path)
-    # trainer.fit(model, datamodule)
-
-    # train_dataset = load_dataset(data_path, split="train", streaming=True)
     
     train_dataset = load_dataset("webdataset", 
                     data_files={"train": os.path.join(args.train_data_dir,"*.tar")}, 
@@ -493,13 +371,13 @@ if __name__ == "__main__":
         accelerator=args.accelerator_device,
         devices=args.num_devices,
         precision=args.mixed_precision,  # "16-mixed"
-        strategy= args.strategy,  # "ddp_find_unused_parameters_true" # , "ddp", DDPStrategy(find_unused_parameters=True)
+        strategy= args.strategy,  # "ddp_find_unused_parameters_true" 
         limit_train_batches=train_dataset_len//(args.train_batch_size*args.num_devices)
     )
     
     if args.pretrained_model_path:
         model = DGMR.from_pretrained(args.pretrained_model_path)
     else:
-        model = DGMR(forecast_steps=NUM_FORECAST_FRAMES, generation_steps=6)
+        model = DGMR(forecast_steps=NUM_FORECAST_FRAMES, generation_steps=args.generation_steps)
 
     trainer.fit(model, train_loader, valid_loader)
