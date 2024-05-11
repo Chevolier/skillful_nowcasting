@@ -25,12 +25,9 @@ import tarfile
 from collections import defaultdict
 
 import os
+import json
+import copy
 
-# os.environ["TORCH_CPP_LOG_LEVEL"]="INFO"
-# os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-
-NUM_INPUT_FRAMES = 4
-NUM_FORECAST_FRAMES = 20
 
 def get_wandb_logger(trainer: Trainer) -> WandbLogger:
     if trainer.fast_dev_run:
@@ -128,37 +125,36 @@ def revert_back_numpy_array(byte_array, size=(24, 256, 256), dtype=np.float32, s
     
     return original_array
 
+class MyCollator(object):
+    def __init__(self, num_input_frames, num_forecast_frames):
+        self.num_input_frames = num_input_frames
+        self.num_forecast_frames = num_forecast_frames
+        
+    def __call__(self, examples):
+        # do something with batch and self.params
+        inputs, targets = [], []
+        for i, example in enumerate(examples):
+            cropped_frames_max_nonzero = revert_back_numpy_array(example["cropped_frames_max_nonzero"], size=(24, 256, 256), dtype=np.float32)
+            max_pos = revert_back_numpy_array(example["max_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
 
-def collate_fn(examples):
-    """
-       data: is a list of tuples with (example, label, length)
-             where 'example' is a tensor of arbitrary shape
-             and label/length are scalars
-    """
-    
-    inputs, targets = [], []
-    for i, example in enumerate(examples):
-        cropped_frames_max_nonzero = revert_back_numpy_array(example["cropped_frames_max_nonzero"], size=(24, 256, 256), dtype=np.float32)
-        max_pos = revert_back_numpy_array(example["max_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
-        
-        cropped_frames_random = revert_back_numpy_array(example["cropped_frames_random"], size=(24, 256, 256), dtype=np.float32)
-        random_pos = revert_back_numpy_array(example["random_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
-        
-        if random.random() < 0.5:
-            input_frames = cropped_frames_max_nonzero[:NUM_INPUT_FRAMES, ...]
-            target_frames = cropped_frames_max_nonzero[NUM_INPUT_FRAMES:NUM_INPUT_FRAMES+NUM_FORECAST_FRAMES, ...]
-        else:
-            input_frames = cropped_frames_random[:NUM_INPUT_FRAMES, ...]
-            target_frames = cropped_frames_random[NUM_INPUT_FRAMES:NUM_INPUT_FRAMES+NUM_FORECAST_FRAMES, ...]
-                        
-        inputs.append(input_frames)
-        targets.append(target_frames)
-        
-    inputs_tensor = torch.Tensor(np.stack(inputs)).unsqueeze(2)
-    targets_tensor = torch.Tensor(np.stack(targets)).unsqueeze(2)
-    
-    return inputs_tensor, targets_tensor
+            cropped_frames_random = revert_back_numpy_array(example["cropped_frames_random"], size=(24, 256, 256), dtype=np.float32)
+            random_pos = revert_back_numpy_array(example["random_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
 
+            if random.random() < 0.5:
+                input_frames = cropped_frames_max_nonzero[:self.num_input_frames, ...]
+                target_frames = cropped_frames_max_nonzero[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
+            else:
+                input_frames = cropped_frames_random[:self.num_input_frames, ...]
+                target_frames = cropped_frames_random[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
+
+            inputs.append(input_frames)
+            targets.append(target_frames)
+
+        inputs_tensor = torch.Tensor(np.stack(inputs)).unsqueeze(2)
+        targets_tensor = torch.Tensor(np.stack(targets)).unsqueeze(2)
+
+        return inputs_tensor, targets_tensor
+    
 
 def count_distinct_files(folder_path):
     distinct_files = defaultdict(set)
@@ -172,7 +168,6 @@ def count_distinct_files(folder_path):
                         file_prefix, _ = os.path.splitext(file_name)
                         distinct_files[file_prefix].add(file_name)
     return len(distinct_files)
-    
     
 
 def parse_args(input_args=None):
@@ -210,12 +205,12 @@ def parse_args(input_args=None):
         default="checkpoint",
         help="The output directory where the model predictions and checkpoints will be written.",
     )
-    # parser.add_argument(
-    #     "--args.num_input_frames", type=int, default=4, help="Number of input frames."
-    # )
-    # parser.add_argument(
-    #     "--num_forecast_frames", type=int, default=18, help="Number of forecasted frames."
-    # )
+    parser.add_argument(
+        "--num_input_frames", type=int, default=4, help="Number of input frames."
+    )
+    parser.add_argument(
+        "--num_forecast_frames", type=int, default=20, help="Number of forecasted frames."
+    )
     parser.add_argument(
         "--generation_steps", type=int, default=6, help="Number of generation steps for optimizing generator, used for Monte-carlo simulations."
     )
@@ -225,7 +220,7 @@ def parse_args(input_args=None):
         default=None,
         choices=["32", "16-mixed", "bf16-mixed"],
         help=(
-            "Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >="
+            "Whether to use mixed precision. Choose between 16-mixed and bf16-mixed. Bf16 requires PyTorch >="
             " 1.10.and an Nvidia Ampere GPU.  Default to the value of accelerate config of the current system or the"
             " flag passed with the `accelerate.launch` command. Use this argument to override the accelerate config."
         ),
@@ -253,6 +248,9 @@ def parse_args(input_args=None):
     )
     parser.add_argument(
         "--train_batch_size", type=int, default=1, help="Batch size (per device) for the training dataloader."
+    )
+    parser.add_argument(
+        "--valid_batch_size", type=int, default=1, help="Batch size (per device) for the validation dataloader."
     )
     parser.add_argument("--num_train_epochs", type=int, default=10)
     parser.add_argument(
@@ -303,6 +301,15 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--max_valid_samples",
+        type=int,
+        default=None,
+        help=(
+            "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
+        ),
+    )
+    parser.add_argument(
         "--validation_steps",
         type=int,
         default=100,
@@ -312,6 +319,12 @@ def parse_args(input_args=None):
             " and logging the images."
         ),
     )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before performing a backward/update pass.",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -320,16 +333,18 @@ def parse_args(input_args=None):
 
     return args
     
+    
 if __name__ == "__main__":
     
     args = parse_args()
     
     wandb_logger = WandbLogger(logger="dgmr")
     model_checkpoint = ModelCheckpoint(
-        monitor="train/g_loss",
+        monitor="val_g_loss",
         dirpath=args.output_dir,
-        filename="best",
-        every_n_train_steps=args.checkpointing_steps
+        every_n_train_steps=args.checkpointing_steps,
+        filename='{step:d}-{val_g_loss:.2f}',
+        save_top_k=args.checkpoints_total_limit
     )
     
     train_dataset = load_dataset("webdataset", 
@@ -337,19 +352,20 @@ if __name__ == "__main__":
                     split="train", 
                     streaming=True)
     
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        shuffle=False,
+        collate_fn=MyCollator(args.num_input_frames, args.num_forecast_frames), # collate_fn,
+        batch_size=args.train_batch_size,
+        num_workers=args.dataloader_num_workers,
+    )
+    
     if args.max_train_samples:
         train_dataset_len = args.max_train_samples
     else:
         train_dataset_len = count_distinct_files(args.train_data_dir)
-    
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        shuffle=False,
-        collate_fn=collate_fn,
-        batch_size=args.train_batch_size,
-        num_workers=args.dataloader_num_workers,
-    )
-    train_dataloader_len=train_dataset_len//(args.train_batch_size)
+        
+    train_dataloader_len=train_dataset_len//(args.train_batch_size*args.num_devices)
     
     valid_dataset = load_dataset("webdataset", 
                     data_files={"valid": os.path.join(args.valid_data_dir,"*.tar")}, 
@@ -359,10 +375,29 @@ if __name__ == "__main__":
     valid_loader = torch.utils.data.DataLoader(
         valid_dataset,
         shuffle=False,
-        collate_fn=collate_fn,
+        collate_fn=MyCollator(args.num_input_frames, args.num_forecast_frames),
         batch_size=args.train_batch_size,
         num_workers=args.dataloader_num_workers,
     )
+    
+    if args.max_valid_samples:
+        valid_dataset_len = args.max_valid_samples
+    else:
+        valid_dataset_len = count_distinct_files(args.valid_data_dir)
+        
+    valid_dataloader_len = valid_dataset_len // (args.valid_batch_size*args.num_devices)
+    
+    total_batch_size = args.train_batch_size * args.num_devices * args.gradient_accumulation_steps
+    total_optimization_steps = args.num_train_epochs * train_dataloader_len // args.gradient_accumulation_steps
+    
+    print("***** Running training *****")
+    print(f"  Num examples = {train_dataset_len}")
+    print(f"  Num batches each epoch = {train_dataloader_len}")
+    print(f"  Num Epochs = {args.num_train_epochs}")
+    print(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    print(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    print(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    print(f"  Total optimization steps = {total_optimization_steps}")
     
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
@@ -372,12 +407,27 @@ if __name__ == "__main__":
         devices=args.num_devices,
         precision=args.mixed_precision,  # "16-mixed"
         strategy= args.strategy,  # "ddp_find_unused_parameters_true" 
-        limit_train_batches=train_dataset_len//(args.train_batch_size*args.num_devices)
+        limit_train_batches=train_dataloader_len, # 
+        limit_val_batches=valid_dataloader_len, #
+        val_check_interval=args.validation_steps,
+        accumulate_grad_batches=args.gradient_accumulation_steps,
+        log_every_n_steps=args.validation_steps
     )
     
     if args.pretrained_model_path:
         model = DGMR.from_pretrained(args.pretrained_model_path)
+        model.generation_steps = args.generation_steps
+        model.config['forecast_steps'] = args.num_forecast_frames
+        model.sampler.forecast_steps = args.num_forecast_frames
+        
+        print("------model.config parameters------")
+        print(f"forecast_steps: {model.config['forecast_steps']}")
+        print(f"generation_steps: {model.config['generation_steps']}")
     else:
-        model = DGMR(forecast_steps=NUM_FORECAST_FRAMES, generation_steps=args.generation_steps)
+        model = DGMR(forecast_steps=args.num_forecast_frames, generation_steps=args.generation_steps)
+        
+        print("------model.config parameters------")
+        print(f"forecast_steps: {model.config['forecast_steps']}")
+        print(f"generation_steps: {model.config['generation_steps']}")
 
     trainer.fit(model, train_loader, valid_loader)
