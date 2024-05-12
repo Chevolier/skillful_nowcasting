@@ -9,7 +9,9 @@ from torch.utils.data import DataLoader
 
 from dgmr import DGMR
 
+wandb.login(key='0d32276b8b4b08bb83ecd160d941dba83b3b4975')
 wandb.init(project="dgmr")
+
 # wandb.init(mode="disabled")
 from pathlib import Path
 
