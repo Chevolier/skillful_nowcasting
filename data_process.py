@@ -271,7 +271,7 @@ def crop_frames(frames, crop_size=256, num_thr=100):
 
 
 crop_size = 256
-num_thr = 2000 # for random cropping, ensure that the cropped area has at least this number of elements are nonzero
+num_thr = 6000 # for random cropping, ensure that the cropped area has at least this number of elements are nonzero
 
 num_periods = 3000
 num_total_frames = 24
@@ -279,6 +279,9 @@ num_total_frames = 24
 count = 0
 tar_id = 0
 num_per_tar = 10
+
+save_dir = f"data/zuimei-radar-cropped-num_thr{num_thr}"
+os.makedirs(save_dir, exist_ok=True)
 
 for period in tqdm(periods[:num_periods]):
     if len(period) < num_total_frames:
@@ -295,8 +298,14 @@ for period in tqdm(periods[:num_periods]):
         print(f"End reading {len(period)} frames, time cost: {time_cost_reading:.2f}s.")
 
         print("Start croppping and saving")
-        frame_result = crop_image(period_frames[0], crop_size, num_thr)
+        try:
+            frame_result = crop_image(period_frames[0], crop_size, num_thr)
+        except Exception as e:
+            print(f"Error: {e}")
+            continue
+        
         num_examples = period_frames.shape[0] - num_total_frames + 1
+        
         for idx in tqdm(range(num_examples)):
             frames = period_frames[idx:idx+num_total_frames]
 
@@ -311,7 +320,7 @@ for period in tqdm(periods[:num_periods]):
             
             # Define the output dataset directory
             if count == 0:
-                output_dir = f"data/zuimei-radar-cropped/{tar_id:06d}.tar"
+                output_dir = os.path.join(save_dir, f"{tar_id:06d}.tar")
                 writer = wds.TarWriter(output_dir)
 
             sample = {

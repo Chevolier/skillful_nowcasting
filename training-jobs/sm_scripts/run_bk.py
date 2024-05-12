@@ -114,63 +114,6 @@ class UploadCheckpointsAsArtifact(Callback):
 
         experiment.log_artifact(ckpts)
 
-class UploadCheckpointsToS3(Callback):
-    def __init__(self, ckpt_dir: str = "checkpoints/", upload_best_only: bool = False):
-        self.ckpt_dir = ckpt_dir
-        self.upload_best_only = upload_best_only
-
-    # @rank_zero_only
-    # def on_keyboard_interrupt(self, trainer, pl_module):
-    #     self.on_train_end(trainer, pl_module)
-
-#     @rank_zero_only
-#     def on_train_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-#         experiment.log_artifact(ckpts)
-
-#     @rank_zero_only
-#     def on_validation_epoch_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-    @rank_zero_only
-    def on_train_epoch_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-#         experiment.log_artifact(ckpts)
-        
-        # upload checkpoint to s3
-        ############################
-        persistant_path = os.environ['OUTPUT_MODEL_S3_PATH'] + str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S")) + '/'
-        os.system("./s5cmd sync {0} {1}".format(self.ckpt_dir, persistant_path)) # +'/best_model'
-
 
 def revert_back_numpy_array(byte_array, size=(24, 256, 256), dtype=np.float32, source_dtype = np.float32):
     # Load the flattened data from disk
@@ -184,10 +127,9 @@ def revert_back_numpy_array(byte_array, size=(24, 256, 256), dtype=np.float32, s
     return original_array
 
 class MyCollator(object):
-    def __init__(self, num_input_frames, num_forecast_frames, max_nonzero_ratio=0.5):
+    def __init__(self, num_input_frames, num_forecast_frames):
         self.num_input_frames = num_input_frames
         self.num_forecast_frames = num_forecast_frames
-        self.max_nonzero_ratio = max_nonzero_ratio
         
     def __call__(self, examples):
         # do something with batch and self.params
@@ -199,7 +141,7 @@ class MyCollator(object):
             cropped_frames_random = revert_back_numpy_array(example["cropped_frames_random"], size=(24, 256, 256), dtype=np.float32)
             random_pos = revert_back_numpy_array(example["random_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
 
-            if random.random() < self.max_nonzero_ratio:
+            if random.random() < 0.5:
                 input_frames = cropped_frames_max_nonzero[:self.num_input_frames, ...]
                 target_frames = cropped_frames_max_nonzero[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
             else:
@@ -283,12 +225,6 @@ def parse_args(input_args=None):
             " 1.10.and an Nvidia Ampere GPU.  Default to the value of accelerate config of the current system or the"
             " flag passed with the `accelerate.launch` command. Use this argument to override the accelerate config."
         ),
-    )
-    parser.add_argument(
-        "--max_nonzero_ratio",
-        type=float,
-        default=0.5,
-        help="The ratio to select max non zero frames or random frames during training.",
     )
     parser.add_argument(
         "--accelerator_device",
@@ -403,6 +339,12 @@ if __name__ == "__main__":
     
     args = parse_args()
     
+    print("*****************start cp data and pretrained models*****************************")
+    os.system("chmod +x ./s5cmd")
+    os.system("./s5cmd sync {0}* {1}".format(os.environ['TRAIN_DATA_PATH'], args.train_data_dir))
+    os.system("./s5cmd sync {0}* {1}".format(os.environ['VALID_DATA_PATH'], args.valid_data_dir))
+    os.system("./s5cmd sync {0}* {1}".format(os.environ['PRETRAINED_MODEL_S3_PATH'], args.pretrained_model_path))
+    
     wandb_logger = WandbLogger(logger="dgmr")
     model_checkpoint = ModelCheckpoint(
         monitor="val_g_loss",
@@ -411,8 +353,6 @@ if __name__ == "__main__":
         filename='{step:d}-{val_g_loss:.2f}',
         save_top_k=args.checkpoints_total_limit
     )
-    
-    upload_checkpoint_to_s3 = UploadCheckpointsToS3(args.output_dir)
     
     train_dataset = load_dataset("webdataset", 
                     data_files={"train": os.path.join(args.train_data_dir,"*.tar")}, 
@@ -469,7 +409,7 @@ if __name__ == "__main__":
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
         logger= wandb_logger,
-        callbacks=[model_checkpoint, upload_checkpoint_to_s3],
+        callbacks=[model_checkpoint],
         accelerator=args.accelerator_device,
         devices=args.num_devices,
         precision=args.mixed_precision,  # "16-mixed"
@@ -482,6 +422,7 @@ if __name__ == "__main__":
     )
     
     if args.pretrained_model_path:
+        
         model = DGMR.from_pretrained(args.pretrained_model_path)
         model.generation_steps = args.generation_steps
         model.config['forecast_steps'] = args.num_forecast_frames
@@ -498,3 +439,8 @@ if __name__ == "__main__":
         print(f"generation_steps: {model.config['generation_steps']}")
 
     trainer.fit(model, train_loader, valid_loader)
+    
+    # upload checkpoint to s3
+    ############################
+    persistant_path = os.environ['OUTPUT_MODEL_S3_PATH'] + str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S")) + '/'
+    os.system("./s5cmd sync {0} {1}".format(args.output_dir, persistant_path)) # +'/best_model'
