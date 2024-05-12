@@ -9,8 +9,6 @@ from torch.utils.data import DataLoader
 
 from dgmr import DGMR
 
-wandb.init(project="dgmr")
-# wandb.init(mode="disabled")
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +27,11 @@ import json
 import copy
 from datetime import datetime
 
+if os.environ.get('WANDB_KEY', ''):
+    wandb.login(key=os.environ['WANDB_KEY'])
+    wandb.init(project="dgmr")
+else:
+    wandb.init(mode="disabled")
 
 def get_wandb_logger(trainer: Trainer) -> WandbLogger:
     if trainer.fast_dev_run:

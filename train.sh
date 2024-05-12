@@ -1,3 +1,5 @@
+
+
 python -u train/run.py --num_input_frames 4 --num_forecast_frames 20 \
                     --pretrained_model_path models/dgmr \
                     --train_data_dir data/zuimei-radar-cropped-debug/train \

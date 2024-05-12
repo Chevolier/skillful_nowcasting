@@ -41,7 +41,7 @@ if __name__ == "__main__":
 #     with open('./as_local_config.yaml', 'w') as f:
 #         yaml.safe_dump(doc, f)
     
-    os.system("wandb disabled")
+    # os.system("wandb disabled")
     # use different xxx.sh to train different model
     os.system("chmod +x ./train.sh")
     os.system("chmod +x ./s5cmd")
