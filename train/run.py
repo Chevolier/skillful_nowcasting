@@ -121,53 +121,8 @@ class UploadCheckpointsToS3(Callback):
         self.ckpt_dir = ckpt_dir
         self.upload_best_only = upload_best_only
 
-    # @rank_zero_only
-    # def on_keyboard_interrupt(self, trainer, pl_module):
-    #     self.on_train_end(trainer, pl_module)
-
-#     @rank_zero_only
-#     def on_train_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-#         experiment.log_artifact(ckpts)
-
-#     @rank_zero_only
-#     def on_validation_epoch_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
     @rank_zero_only
     def on_train_epoch_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-#         experiment.log_artifact(ckpts)
-        
         # upload checkpoint to s3
         ############################
         persistant_path = os.environ['OUTPUT_MODEL_S3_PATH'] + str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S")) + '/'
