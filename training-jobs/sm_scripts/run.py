@@ -28,9 +28,11 @@ import copy
 from datetime import datetime
 
 if os.environ.get('WANDB_KEY', ''):
+    wandb_project_name = "dgmr-v2"
     wandb.login(key=os.environ['WANDB_KEY'])
-    wandb.init(project="dgmr")
+    wandb.init(project=wandb_project_name)
 else:
+    wandb_project_name = ""
     wandb.init(mode="disabled")
 
 def get_wandb_logger(trainer: Trainer) -> WandbLogger:
@@ -124,7 +126,8 @@ class UploadCheckpointsToS3(Callback):
         self.time_index = str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S"))
 
     @rank_zero_only
-    def on_train_epoch_end(self, trainer, pl_module):
+    # def on_train_epoch_end(self, trainer, pl_module):
+    def on_save_checkpoint(self, trainer, pl_module, checkpoint):
         
         # upload checkpoint to s3
         ############################
@@ -370,12 +373,12 @@ if __name__ == "__main__":
     os.system("./s5cmd sync {0}* {1}".format(os.environ['VALID_DATA_PATH'], args.valid_data_dir))
     os.system("./s5cmd sync {0}* {1}".format(os.environ['PRETRAINED_MODEL_S3_PATH'], args.pretrained_model_path))
     
-    wandb_logger = WandbLogger(logger="dgmr-v2")
+    wandb_logger = WandbLogger(logger=wandb_project_name)
     model_checkpoint = ModelCheckpoint(
         # monitor="global_step",
         dirpath=args.output_dir,
         every_n_train_steps=args.checkpointing_steps,
-        filename='{epoch:02d}-{global_step}',
+        filename='{global_step}',
         save_on_train_epoch_end=True
 #         save_top_k=args.checkpoints_total_limit
     )
