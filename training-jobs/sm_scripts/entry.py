@@ -27,19 +27,6 @@ if __name__ == "__main__":
     # os.environ['FI_EFA_USE_DEVICE_RDMA'] = '1' # only support P4d
     os.environ['NCCL_DEBUG'] = 'INFO'
     os.environ['HCCL_OVER_OFI'] = '1'
-        
-    # file_name = './accelerate_config.yaml'
-    # with open(file_name) as f:
-    #     doc = yaml.safe_load(f)
-    # doc['machine_rank'] = host_rank
-    # doc['main_process_ip'] = str(master_addr)
-    # doc['num_machines'] = int(num_hosts)
-    # doc['num_processes'] = int(num_hosts*int(os.environ['SM_NUM_GPUS']))
-    
-    # print('------DDD-------- yaml doc:',doc)
-    
-#     with open('./as_local_config.yaml', 'w') as f:
-#         yaml.safe_dump(doc, f)
     
     # os.system("wandb disabled")
     # use different xxx.sh to train different model

@@ -121,57 +121,15 @@ class UploadCheckpointsToS3(Callback):
     def __init__(self, ckpt_dir: str = "checkpoints/", upload_best_only: bool = False):
         self.ckpt_dir = ckpt_dir
         self.upload_best_only = upload_best_only
-
-    # @rank_zero_only
-    # def on_keyboard_interrupt(self, trainer, pl_module):
-    #     self.on_train_end(trainer, pl_module)
-
-#     @rank_zero_only
-#     def on_train_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-#         experiment.log_artifact(ckpts)
-
-#     @rank_zero_only
-#     def on_validation_epoch_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
+        self.time_index = str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S"))
 
     @rank_zero_only
     def on_train_epoch_end(self, trainer, pl_module):
-#         logger = get_wandb_logger(trainer=trainer)
-#         experiment = logger.experiment
-
-#         ckpts = wandb.Artifact("experiment-ckpts", type="checkpoints")
-
-#         if self.upload_best_only:
-#             ckpts.add_file(trainer.checkpoint_callback.best_model_path)
-#         else:
-#             for path in Path(self.ckpt_dir).rglob("*.ckpt"):
-#                 ckpts.add_file(str(path))
-
-#         experiment.log_artifact(ckpts)
         
         # upload checkpoint to s3
         ############################
-        persistant_path = os.environ['OUTPUT_MODEL_S3_PATH'] + str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S")) + '/'
+        # persistant_path = os.environ['OUTPUT_MODEL_S3_PATH'] + str(datetime.now().strftime("%m-%d-%Y-%H-%M-%S")) + '/'
+        persistant_path = os.environ['OUTPUT_MODEL_S3_PATH'] + self.time_index  + '/'
         os.system("./s5cmd sync {0} {1}".format(self.ckpt_dir, persistant_path)) # +'/best_model'
 
 
@@ -412,17 +370,22 @@ if __name__ == "__main__":
     os.system("./s5cmd sync {0}* {1}".format(os.environ['VALID_DATA_PATH'], args.valid_data_dir))
     os.system("./s5cmd sync {0}* {1}".format(os.environ['PRETRAINED_MODEL_S3_PATH'], args.pretrained_model_path))
     
-    wandb_logger = WandbLogger(logger="dgmr")
+    wandb_logger = WandbLogger(logger="dgmr-v2")
     model_checkpoint = ModelCheckpoint(
-        monitor="val_g_loss",
+        # monitor="global_step",
         dirpath=args.output_dir,
         every_n_train_steps=args.checkpointing_steps,
-        filename='{step:d}-{val_g_loss:.2f}',
-        save_top_k=args.checkpoints_total_limit
+        filename='{epoch:02d}-{global_step}',
+        save_on_train_epoch_end=True
+#         save_top_k=args.checkpoints_total_limit
     )
     
     os.makedirs(args.output_dir, exist_ok=True)
-    
+    args_dict = vars(args)
+
+    with open(os.path.join(args.output_dir, 'args.json'), 'w') as f:
+        json.dump(args_dict, f, indent=4)
+        
     upload_checkpoint_to_s3 = UploadCheckpointsToS3(args.output_dir)
     
     train_dataset = load_dataset("webdataset", 
@@ -433,7 +396,7 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=False,
-        collate_fn=MyCollator(args.num_input_frames, args.num_forecast_frames), # collate_fn,
+        collate_fn=MyCollator(args.num_input_frames, args.num_forecast_frames),
         batch_size=args.train_batch_size,
         num_workers=args.dataloader_num_workers,
     )
