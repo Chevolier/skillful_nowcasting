@@ -135,3 +135,5 @@ tests/lightning_logs/
 *.ckpt
 lightning_logs/
 .DS_Store
+logs/
+checkpoint/
