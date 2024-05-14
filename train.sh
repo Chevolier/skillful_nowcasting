@@ -6,7 +6,7 @@ python -u train/run.py --num_input_frames 4 --num_forecast_frames 20 \
                     --valid_data_dir data/zuimei-radar-cropped-debug/valid \
                     --output_dir checkpoint/dgmr_forecast20_ep2 \
                     --num_train_epochs 1 --train_batch_size 1 --valid_batch_size 1\
-                    --mixed_precision 16-mixed \
+                    --mixed_precision bf16-mixed \
                     --accelerator_device gpu \
                     --num_devices 1 \
                     --strategy ddp \

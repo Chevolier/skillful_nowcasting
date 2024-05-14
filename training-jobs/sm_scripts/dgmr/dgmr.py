@@ -179,9 +179,10 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
 
         self.log_dict(
             {
-                "train_d_loss": discriminator_loss,
-                "train_g_loss": generator_loss,
-                "train_grid_loss": grid_cell_reg,
+                "train/d_loss": discriminator_loss,
+                "train/g_loss": generator_loss,
+                "train/grid_loss": grid_cell_reg,
+                "global_step": self.global_iteration
             },
             prog_bar=True,
         )
@@ -245,9 +246,9 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
 
         self.log_dict(
             {
-                "val_d_loss": discriminator_loss,
-                "val_g_loss": generator_loss,
-                "val_grid_loss": grid_cell_reg,
+                "val/d_loss": discriminator_loss,
+                "val/g_loss": generator_loss,
+                "val/grid_loss": grid_cell_reg,
             },
             prog_bar=True,
         )
