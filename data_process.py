@@ -14,7 +14,9 @@ import pandas as pd
 import time
 import uuid
 
-data_dir = "data/zuimei-radar"
+
+data_dir = "data/zuimei-radar-test"
+
 
 def get_file_paths(directory):
     file_paths = []
@@ -23,21 +25,8 @@ def get_file_paths(directory):
             if file.endswith('.zip'):
                 file_path = os.path.join(root, file)
                 file_paths.append(file_path)
-                
-                # try:
-                #     with zipfile.ZipFile(file_path, 'r') as zip_file:
-                #         # Check if the ZIP file is complete
-                #         bad_file = zip_file.testzip()
-                #         if bad_file is None:
-                #             # The ZIP file is complete
-                #             file_paths.append(file_path)
-                #         else:
-                #             print(f"Warning: '{file_path}' is a corrupted ZIP file.")
-                # except zipfile.BadZipFile:
-                #     print(f"Warning: '{file_path}' is not a valid ZIP file.")
                     
     return file_paths
-
 
 def sort_key(file_path):
     match = re.search(r'BABJ_(\d+)_P', file_path)
@@ -45,7 +34,8 @@ def sort_key(file_path):
         return int(match.group(1))
     else:
         return float('inf')
-
+    
+    
 # Example usage
 file_paths = get_file_paths(data_dir)
 print(f"number of files: {len(file_paths)}")
@@ -55,23 +45,6 @@ file_paths.sort(key=cmp_to_key(lambda x, y: (sort_key(x) > sort_key(y)) - (sort_
 
 print("after sort: \n", file_paths[:5])
 
-# keep only items with 6 min intervals
-file_paths_new = []
-
-for file_path in file_paths:
-    match = re.search(r'BABJ_(\d+)_P', file_path)
-    if not match:
-        print(file_path)
-        continue
-    
-    minutes = int(match.group(1)[-4:-2])
-    if minutes % 6 == 0:
-        file_paths_new.append(file_path)
-    else:
-        print(file_path)
-    
-
-file_paths = file_paths_new
 
 # get consecutive time periods
 def get_time_from_path(file_path, return_type='datetime'):
@@ -90,10 +63,12 @@ times.sort()
 
 periods = []
 current_period = []
+time_interval = 360
+delta = 5
 
 for i in range(len(times)):
     current_time = times[i]
-    if i == 0 or (times[i] - times[i - 1]).total_seconds() >= 355 and (times[i] - times[i - 1]).total_seconds() <= 365:
+    if i == 0 or (times[i] - times[i - 1]).total_seconds() >= time_interval - delta and (times[i] - times[i - 1]).total_seconds() <= time_interval + delta:
         current_period.append(file_paths[i])
     else:
         periods.append(current_period)
@@ -102,9 +77,14 @@ for i in range(len(times)):
 if current_period:
     periods.append(current_period)
 
-print(f"Periods of consecutive file paths: {len(periods)}")
+print(f"Length of periods of consecutive file paths: {len(periods)}")
 # for period in periods[:5]:
 #     print(period)
+count = sum([1 for period in periods if len(period)>=24])
+lens = [len(period) for period in periods if len(period)>=0]
+print(f"Number of periods with length>=24: {count}")
+print(f"Lengths of all periods: {lens}")
+
 
 def read_data(file_path):
     # Open the ZIP file
@@ -119,16 +99,14 @@ def read_data(file_path):
     
     return data
 
-        
 # Print the loaded NumPy array
 data = read_data(file_paths[0])
-print(type(data), data.shape)
+print(f"data type: {type(data)}, data shape: {data.shape}")
 
-count = sum([1 for period in periods if len(period)>=24])
 
-lens = [len(period) for period in periods if len(period)>=0]
-print(count)
-print(lens)
+import numpy as np
+from tqdm import tqdm
+import time
 
 def read_data(file_path):
     # Open the ZIP file
@@ -163,189 +141,122 @@ def read_frames(file_paths, vmin=0, vmax=75):
     return frames
 
 
-def compute_integral_image(image):
-    """Compute the integral image of a given image."""
-    integral_image = np.zeros_like(image)
-    rows, cols = image.shape
-    
-    # Compute the integral image
-    for i in range(rows):
-        for j in range(cols):
-            integral_image[i, j] = 1 if image[i, j] > 0 else 0
-            if i > 0:
-                integral_image[i, j] += integral_image[i-1, j]
-            if j > 0:
-                integral_image[i, j] += integral_image[i, j-1]
-            if i > 0 and j > 0:
-                integral_image[i, j] -= integral_image[i-1, j-1]
-                
-    return integral_image
+def pad_image(arr, base_num=32):
 
+    # Calculate the padding needed for each dimension
+    pad_dim1 = (base_num - arr.shape[0] % base_num) % base_num
+    pad_dim2 = (base_num - arr.shape[1] % base_num) % base_num
 
-def get_window_sum(integral_image, top_left, bottom_right):
-    """Compute the sum of pixel values in a window using the integral image."""
-    top, left = top_left
-    bottom, right = bottom_right
-    
-    window_sum = integral_image[bottom, right]
-    if top > 0:
-        window_sum -= integral_image[top-1, right]
-    if left > 0:
-        window_sum -= integral_image[bottom, left-1]
-    if top > 0 and left > 0:
-        window_sum += integral_image[top-1, left-1]
-        
-    return window_sum
+    # Calculate the padding amount for each side
+    pad_width = ((0, pad_dim1), (0, pad_dim2))
 
+    # Pad the array with zeros
+    padded_arr = np.pad(arr, pad_width, mode='constant', constant_values=0)
+    padded_arr = padded_arr.astype(np.float32)
 
-def crop_image(image, crop_size=256, num_thr=50):
-    # Compute the integral image
-    integral_image = compute_integral_image(image)
+    # print("Padded array shape:", padded_arr.shape)
     
-    # Get the dimensions of the image
-    rows, cols = image.shape
+    return padded_arr
+
+def crop_image_grid(image, crop_size=256, num_thr=1000, threshold=5):
+    # cropping the image by dividing the frame into grids
     
-    # Initialize variables to keep track of the maximum non-zero count and its position
-    max_count = -1
-    max_pos = (0, 0)
     
+    print(f"original image shape: {image.shape}")
+    padded_image = pad_image(image, crop_size)
+    
+    width, height = padded_image.shape
+    print(f"padded image shape: {padded_image.shape}")
+    
+    counts = []
     valid_positions = []
-    # Slide the window across the integral image
-    for i in range(0, rows - crop_size + 1):
-        for j in range(0, cols - crop_size + 1):
-            # Compute the sum of pixel values in the current window
-            count = get_window_sum(integral_image, (i, j), (i+crop_size-1, j+crop_size-1))
-            
-            # Update the maximum count and its position if the current count is greater
-            if count > max_count:
-                max_count = count
-                max_pos = (i, j)
-            
-            if count > num_thr:
-                valid_positions.append((i, j))
+    for row in range(0, width, crop_size):
+        for col in range(0, height, crop_size):
+            cropped_image = padded_image[row:row+crop_size, col:col+crop_size]
+            count = np.sum(cropped_image>=threshold)
+            if count >= num_thr:
+                valid_positions.append((row, col, count))
+                counts.append(count)
     
-    # Crop the image using the position with the maximum count
-    cropped_image_max_nonzero = image[max_pos[0]:max_pos[0]+crop_size, max_pos[1]:max_pos[1]+crop_size]
-    
-    # If no valid position found, raise an exception
-    if not valid_positions:
-        raise ValueError("No valid crop position found with the given threshold.")
-
-    # Select a random valid position
-    random_idx = np.random.choice(len(valid_positions))
-    random_pos = valid_positions[random_idx]
-
-    # Crop the array
-    cropped_image_random = image[random_pos[0]:random_pos[0]+crop_size,
-                         random_pos[1]:random_pos[1]+crop_size]
-
-    result = {
-        "cropped_image_max_nonzero": cropped_image_max_nonzero,
-        "max_pos": max_pos,
-        "cropped_image_random": cropped_image_random,
-        "random_pos": random_pos,
-        "valid_positions": valid_positions
-    }
-    
-    return result
-
-
-def crop_frames(frames, crop_size=256, num_thr=100):
-    # used to crop the large frame into small frames
-    result = crop_image(frames[0], crop_size=crop_size, num_thr=num_thr)
-    
-    max_pos = result['max_pos']
-    cropped_frames_max_nonzero = frames[:,max_pos[0]:max_pos[0]+crop_size, max_pos[1]+max_pos[1]+crop_size]
-    
-    random_pos = result['random_pos']
-    cropped_frames_random= frames[:,random_pos[0]:random_pos[0]+crop_size, random_pos[1]+random_pos[1]+crop_size]
-    
-    cropped_result = {
-        "cropped_frames_max_nonzero": cropped_frames_max_nonzero,
-        "max_pos": max_pos,
-        "cropped_frames_random": cropped_frames_random,
-        "random_pos": random_pos
-    }
-    
-    return cropped_result
+    return {"valid_positions": valid_positions}
 
 
 crop_size = 256
-num_thr = 6000 # for random cropping, ensure that the cropped area has at least this number of elements are nonzero
+num_thr = 1000 # for random cropping, ensure that the cropped area has at least this number of elements are nonzero
+threshold = 10
 
-num_periods = 3000
+num_periods = len(periods)
 num_total_frames = 24
 
 count = 0
 tar_id = 0
-num_per_tar = 10
+num_per_tar = 20
 
-save_dir = f"data/zuimei-radar-cropped-num_thr{num_thr}"
+save_dir = f"data/zuimei-radar-cropped-num_thr{num_thr}-threshold{threshold}-test"
 os.makedirs(save_dir, exist_ok=True)
 
 for period in tqdm(periods[:num_periods]):
     if len(period) < num_total_frames:
         continue
             
-    sub_period_size = 240
+    sub_period_size = 60  # 24 * 60 / 6 = 240 one day, 6 hours = 
     
     for sub_pid in range(0, len(period), sub_period_size):
         start_reading = time.time()
-        print(f"Start reading {len(period)} frames ...")
-        period_frames = read_frames(period[sub_pid:sub_pid+sub_period_size])
+        sub_period = period[sub_pid:sub_pid+sub_period_size]
+        print(f"Start reading {len(sub_period)} frames ...")
+        period_frames = read_frames(sub_period)
         end_reading = time.time()
         time_cost_reading = end_reading - start_reading
-        print(f"End reading {len(period)} frames, time cost: {time_cost_reading:.2f}s.")
+        print(f"End reading {len(sub_period)} frames, time cost: {time_cost_reading:.2f}s.")
 
         print("Start croppping and saving")
         try:
-            frame_result = crop_image(period_frames[0], crop_size, num_thr)
+            frame_result = crop_image_grid(period_frames[0], crop_size, num_thr, threshold)
         except Exception as e:
             print(f"Error: {e}")
             continue
         
         num_examples = period_frames.shape[0] - num_total_frames + 1
+        if num_examples <= 0:
+            continue
         
+        valid_positions = frame_result['valid_positions']
         for idx in tqdm(range(num_examples)):
             frames = period_frames[idx:idx+num_total_frames]
-
-            max_pos = frame_result['max_pos']
-            cropped_frames_max_nonzero = frames[:,max_pos[0]:max_pos[0]+crop_size, max_pos[1]:max_pos[1]+crop_size]
-
-            random_idx = np.random.choice(len(frame_result["valid_positions"]))
-            random_pos = frame_result["valid_positions"][random_idx]
-            cropped_frames_random= frames[:,random_pos[0]:random_pos[0]+crop_size, random_pos[1]:random_pos[1]+crop_size]
-
-            frame_start_time = get_time_from_path(period[idx], 'str')
             
-            # Define the output dataset directory
-            if count == 0:
-                output_dir = os.path.join(save_dir, f"{tar_id:06d}.tar")
-                writer = wds.TarWriter(output_dir)
+            for position in valid_positions:
+                cropped_frames= frames[:,position[0]:position[0]+crop_size, position[1]:position[1]+crop_size]
 
-            sample = {
-                "__key__": str(uuid.uuid4()),
-                "cropped_frames_max_nonzero": cropped_frames_max_nonzero.tobytes(),
-                "max_pos": np.array(max_pos, dtype=np.float32).tobytes(),
-                "cropped_frames_random": cropped_frames_random.tobytes(),
-                "random_pos": np.array(random_pos, dtype=np.float32).tobytes(),
-                "start_time": frame_start_time.encode(),
-            }
+                frame_start_time = get_time_from_path(period[idx], 'str')
 
-            # Write the sample to the dataset
-            writer.write(sample)
-            count += 1
+                # Define the output dataset directory
+                if count == 0:
+                    output_dir = os.path.join(save_dir, f"{tar_id:06d}.tar")
+                    writer = wds.TarWriter(output_dir)
 
-            if count == num_per_tar:
-                # Close the writer
-                writer.close()
-                count = 0
-                tar_id += 1
+                sample = {
+                    "__key__": str(uuid.uuid4()),
+                    "cropped_frames": cropped_frames.tobytes(),
+                    "position": np.array(position, dtype=np.float32).tobytes(),
+                    "start_time": frame_start_time.encode(),
+                }
+
+                # Write the sample to the dataset
+                writer.write(sample)
+                count += 1
+
+                if count == num_per_tar:
+                    # Close the writer
+                    writer.close()
+                    count = 0
+                    tar_id += 1
     
         end_crop = time.time()
         time_cost_crop = end_crop - end_reading
         print(f"End cropping and saving {num_examples} frames, time cost: {time_cost_crop}s, average time cost: {time_cost_crop/num_examples:.2f}s")
 
-
 if count < num_per_tar:
     writer.close()
+    
+    

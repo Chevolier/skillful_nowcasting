@@ -141,27 +141,19 @@ def revert_back_numpy_array(byte_array, size=(24, 256, 256), dtype=np.float32, s
     return original_array
 
 class MyCollator(object):
-    def __init__(self, num_input_frames, num_forecast_frames, max_nonzero_ratio=0.5):
+    def __init__(self, num_input_frames, num_forecast_frames):
         self.num_input_frames = num_input_frames
         self.num_forecast_frames = num_forecast_frames
-        self.max_nonzero_ratio = max_nonzero_ratio
         
     def __call__(self, examples):
         # do something with batch and self.params
         inputs, targets = [], []
         for i, example in enumerate(examples):
-            cropped_frames_max_nonzero = revert_back_numpy_array(example["cropped_frames_max_nonzero"], size=(24, 256, 256), dtype=np.float32)
-            max_pos = revert_back_numpy_array(example["max_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
-
-            cropped_frames_random = revert_back_numpy_array(example["cropped_frames_random"], size=(24, 256, 256), dtype=np.float32)
-            random_pos = revert_back_numpy_array(example["random_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
-
-            if random.random() < self.max_nonzero_ratio:
-                input_frames = cropped_frames_max_nonzero[:self.num_input_frames, ...]
-                target_frames = cropped_frames_max_nonzero[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
-            else:
-                input_frames = cropped_frames_random[:self.num_input_frames, ...]
-                target_frames = cropped_frames_random[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
+            cropped_frames = revert_back_numpy_array(example["cropped_frames"], size=(24, 256, 256), dtype=np.float32)
+            position = revert_back_numpy_array(example["position"], size=(3), dtype=np.uint8, source_dtype=np.float32)
+           
+            input_frames = cropped_frames[:self.num_input_frames, ...]
+            target_frames = cropped_frames[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
 
             inputs.append(input_frames)
             targets.append(target_frames)
