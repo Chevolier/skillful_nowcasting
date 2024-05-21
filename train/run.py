@@ -9,10 +9,7 @@ from torch.utils.data import DataLoader
 
 from dgmr import DGMR
 
-wandb.login(key='0d32276b8b4b08bb83ecd160d941dba83b3b4975')
-wandb.init(project="dgmr")
-
-# wandb.init(mode="disabled")
+wandb.init(mode="disabled")
 from pathlib import Path
 
 import numpy as np
@@ -234,12 +231,6 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
-        "--max_nonzero_ratio",
-        type=float,
-        default=0.5,
-        help="The ratio to select max non zero frames or random frames during training.",
-    )
-    parser.add_argument(
         "--accelerator_device",
         type=str,
         default="auto",
@@ -354,11 +345,12 @@ if __name__ == "__main__":
     
     wandb_logger = WandbLogger(logger="dgmr")
     model_checkpoint = ModelCheckpoint(
-        monitor="val_g_loss",
+        # monitor="global_step",
         dirpath=args.output_dir,
         every_n_train_steps=args.checkpointing_steps,
-        filename='{step:d}-{val_g_loss:.2f}',
-        save_top_k=args.checkpoints_total_limit
+        filename='{global_step}',
+        save_on_train_epoch_end=True
+#         save_top_k=args.checkpoints_total_limit
     )
     
     upload_checkpoint_to_s3 = UploadCheckpointsToS3(args.output_dir)

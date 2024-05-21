@@ -10,3 +10,4 @@ wandb
 datasets
 cartopy
 webdataset
+pytest

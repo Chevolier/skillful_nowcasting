@@ -245,12 +245,6 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
-        "--max_nonzero_ratio",
-        type=float,
-        default=0.5,
-        help="The ratio to select max non zero frames or random frames during training.",
-    )
-    parser.add_argument(
         "--accelerator_device",
         type=str,
         default="auto",

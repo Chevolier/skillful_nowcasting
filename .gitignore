@@ -137,3 +137,4 @@ lightning_logs/
 .DS_Store
 logs/
 checkpoint/
+outputs/
