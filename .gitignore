@@ -138,3 +138,6 @@ lightning_logs/
 logs/
 checkpoint/
 outputs/
+sagemaker-deploy/dgmr/*
+!sagemaker-deploy/dgmr/*.py
+
