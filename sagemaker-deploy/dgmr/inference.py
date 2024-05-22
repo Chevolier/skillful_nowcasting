@@ -3,6 +3,9 @@ from dgmr import DGMR
 import json
 
 def model_fn(model_dir):
+    
+    print("model_fn-----------------------")
+    
     model = DGMR.from_pretrained(model_dir)
     model.eval()
     model.cuda()
@@ -20,29 +23,38 @@ def input_fn(request_body, request_content_type):
     if request_content_type == "application/json":
         request_body_json = json.loads(request_body)
 
-        print("request_body_json", request_body_json)
-
         return request_body_json
 
-    # If the request_content_type is not as expected, raise an exception
     raise ValueError(f"Content type {request_content_type} is not supported")
 
-def predict_fn(data, model):
-    data = json.loads(data)
+def predict_fn(input_data, model):
+    print("predict_fn---------------------")
+    print(f"input_data type: {type(input_data)}")
     
-    forecast_steps = data.get("forecast_steps", 18)
+    forecast_steps = input_data.get("forecast_steps", 18)
     
     model.config['forecast_steps'] = forecast_steps
     model.sampler.forecast_steps = forecast_steps
-    model.latent_stack.shape = data.get("latent_stack_shape", (8, 256//32, 256//32))
+    model.latent_stack.shape = input_data.get("latent_stack_shape", (8, 256//32, 256//32))
     
-    input_frames = data.get("input_frames")
+    input_frames = input_data.get("input_frames")
     input_frames = torch.tensor(input_frames).unsqueeze(0).unsqueeze(2)
-
+    
     with torch.no_grad():
         pred_frames = model(input_frames.cuda())
         pred_frames[pred_frames<0] = 0
     
-    results = {"pred_frames": pred_frames.cpu(), "forecast_steps": forecast_steps}
+    print(f"pred_frames shape: {pred_frames.shape}")
+    pred_frames = pred_frames.cpu().squeeze()[0].tolist()
+    results = {"pred_frames": pred_frames, "forecast_steps": forecast_steps}
     
     return results
+
+def output_fn(predictions, content_type):
+    """
+    After invoking predict_fn, the model server invokes `output_fn`.
+    """
+    
+    print("output_fn-----------------------")
+    
+    return json.dumps(predictions)
