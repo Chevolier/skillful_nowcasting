@@ -59,6 +59,7 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
             pretrained:
         """
         super().__init__()
+        
         config = locals()
         config.pop("__class__")
         config.pop("self")
@@ -115,13 +116,12 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
 
     def forward(self, x):
         x = self.generator(x)
+        
         return x
 
     def training_step(self, batch, batch_idx):
-        # print(f"training batch: {batch_idx}, {type(batch)}")
         images, future_images = batch
-        images = images.float()
-        future_images = future_images.float()
+        
         self.global_iteration += 1
         g_opt, d_opt = self.optimizers()
         ##########################
@@ -182,6 +182,7 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
                 "train/d_loss": discriminator_loss,
                 "train/g_loss": generator_loss,
                 "train/grid_loss": grid_cell_reg,
+                "global_step": self.global_iteration
             },
             prog_bar=True,
         )
@@ -195,11 +196,7 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
             )
 
     def validation_step(self, batch, batch_idx):
-        # print(f"valid batch: {batch_idx}, {type(batch[0])}")
         images, future_images = batch
-        # print(f"images: {images.shape}, future_images: {future_images.shape}")
-        images = images.float()
-        future_images = future_images.float()
         ##########################
         # Optimize Discriminator #
         ##########################
@@ -298,3 +295,8 @@ class DGMR(pl.LightningModule, NowcastingModelHubMixin):
             tensorboard.add_image(
                 f"{step}/Generated_Image_Frame_{i}", image_grid, global_step=batch_idx
             )
+    
+    # def on_after_backward(self):
+    #     for name, param in self.named_parameters():
+    #         if param.grad is None:
+    #             print(name)

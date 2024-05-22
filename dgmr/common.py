@@ -36,14 +36,17 @@ class GBlock(torch.nn.Module):
         self.relu = torch.nn.ReLU()
         # Upsample in the 1x1
         conv2d = get_conv_layer(conv_type)
-        self.conv_1x1 = spectral_norm(
-            conv2d(
-                in_channels=input_channels,
-                out_channels=output_channels,
-                kernel_size=1,
-            ),
-            eps=spectral_normalized_eps,
-        )
+        
+        if input_channels != output_channels: # update to avoid ddp error
+            self.conv_1x1 = spectral_norm(
+                conv2d(
+                    in_channels=input_channels,
+                    out_channels=output_channels,
+                    kernel_size=1,
+                ),
+                eps=spectral_normalized_eps,
+            )
+            
         # Upsample 2D conv
         self.first_conv_3x3 = spectral_norm(
             conv2d(
@@ -177,13 +180,16 @@ class DBlock(torch.nn.Module):
             self.pooling = torch.nn.AvgPool3d(kernel_size=2, stride=2)
         else:
             self.pooling = torch.nn.AvgPool2d(kernel_size=2, stride=2)
-        self.conv_1x1 = spectral_norm(
-            conv2d(
-                in_channels=input_channels,
-                out_channels=output_channels,
-                kernel_size=1,
+        
+        if self.input_channels != self.output_channels:
+            self.conv_1x1 = spectral_norm(
+                conv2d(
+                    in_channels=input_channels,
+                    out_channels=output_channels,
+                    kernel_size=1,
+                )
             )
-        )
+            
         self.first_conv_3x3 = spectral_norm(
             conv2d(
                 in_channels=input_channels,

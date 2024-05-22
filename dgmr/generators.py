@@ -14,6 +14,9 @@ from dgmr.layers import ConvGRU
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARN)
 
+def freeze_params(prefix):
+    for param in self.parameters():
+        param.requires_grad = False
 
 class Sampler(torch.nn.Module, PyTorchModelHubMixin):
     def __init__(
@@ -55,6 +58,8 @@ class Sampler(torch.nn.Module, PyTorchModelHubMixin):
             )
         )
         self.g1 = GBlock(input_channels=latent_channels, output_channels=latent_channels)
+        
+        
         self.up_g1 = UpsampleGBlock(
             input_channels=latent_channels, output_channels=latent_channels // 2
         )
