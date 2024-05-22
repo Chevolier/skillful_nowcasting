@@ -148,27 +148,19 @@ def revert_back_numpy_array(byte_array, size=(24, 256, 256), dtype=np.float32, s
     return original_array
 
 class MyCollator(object):
-    def __init__(self, num_input_frames, num_forecast_frames, max_nonzero_ratio=0.5):
+    def __init__(self, num_input_frames, num_forecast_frames):
         self.num_input_frames = num_input_frames
         self.num_forecast_frames = num_forecast_frames
-        self.max_nonzero_ratio = max_nonzero_ratio
         
     def __call__(self, examples):
         # do something with batch and self.params
         inputs, targets = [], []
         for i, example in enumerate(examples):
-            cropped_frames_max_nonzero = revert_back_numpy_array(example["cropped_frames_max_nonzero"], size=(24, 256, 256), dtype=np.float32)
-            max_pos = revert_back_numpy_array(example["max_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
-
-            cropped_frames_random = revert_back_numpy_array(example["cropped_frames_random"], size=(24, 256, 256), dtype=np.float32)
-            random_pos = revert_back_numpy_array(example["random_pos"], size=(2), dtype=np.uint8, source_dtype=np.float32)
-
-            if random.random() < self.max_nonzero_ratio:
-                input_frames = cropped_frames_max_nonzero[:self.num_input_frames, ...]
-                target_frames = cropped_frames_max_nonzero[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
-            else:
-                input_frames = cropped_frames_random[:self.num_input_frames, ...]
-                target_frames = cropped_frames_random[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
+            cropped_frames = revert_back_numpy_array(example["cropped_frames"], size=(24, 256, 256), dtype=np.float32)
+            position = revert_back_numpy_array(example["position"], size=(3), dtype=np.uint8, source_dtype=np.float32)
+           
+            input_frames = cropped_frames[:self.num_input_frames, ...]
+            target_frames = cropped_frames[self.num_input_frames:self.num_input_frames+self.num_forecast_frames, ...]
 
             inputs.append(input_frames)
             targets.append(target_frames)
@@ -180,17 +172,21 @@ class MyCollator(object):
     
 
 def count_distinct_files(folder_path):
-    distinct_files = defaultdict(set)
-    for filename in os.listdir(folder_path):
-        if filename.endswith('.tar'):
-            tar_path = os.path.join(folder_path, filename)
-            with tarfile.open(tar_path, 'r') as tar:
-                for member in tar.getmembers():
-                    if member.isfile():
-                        file_name = os.path.basename(member.name)
-                        file_prefix, _ = os.path.splitext(file_name)
-                        distinct_files[file_prefix].add(file_name)
-    return len(distinct_files)
+    # distinct_files = defaultdict(set)
+    # for filename in os.listdir(folder_path):
+    #     if filename.endswith('.tar'):
+    #         tar_path = os.path.join(folder_path, filename)
+    #         with tarfile.open(tar_path, 'r') as tar:
+    #             for member in tar.getmembers():
+    #                 if member.isfile():
+    #                     file_name = os.path.basename(member.name)
+    #                     file_prefix, _ = os.path.splitext(file_name)
+    #                     distinct_files[file_prefix].add(file_name)
+    # return len(distinct_files)
+
+    filenames = [filename for filename in os.listdir(folder_path) if filename.endswith('.tar')]
+    
+    return len(filenames) * 20  # 20 examples per tar file
     
 
 def parse_args(input_args=None):
@@ -247,12 +243,6 @@ def parse_args(input_args=None):
             " 1.10.and an Nvidia Ampere GPU.  Default to the value of accelerate config of the current system or the"
             " flag passed with the `accelerate.launch` command. Use this argument to override the accelerate config."
         ),
-    )
-    parser.add_argument(
-        "--max_nonzero_ratio",
-        type=float,
-        default=0.5,
-        help="The ratio to select max non zero frames or random frames during training.",
     )
     parser.add_argument(
         "--accelerator_device",

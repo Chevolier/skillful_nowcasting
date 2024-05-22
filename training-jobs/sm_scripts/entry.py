@@ -28,7 +28,7 @@ if __name__ == "__main__":
     os.environ['NCCL_DEBUG'] = 'INFO'
     os.environ['HCCL_OVER_OFI'] = '1'
     
-    # os.system("wandb disabled")
+    os.system("wandb disabled")
     # use different xxx.sh to train different model
     os.system("chmod +x ./train.sh")
     os.system("chmod +x ./s5cmd")

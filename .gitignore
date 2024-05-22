@@ -137,3 +137,7 @@ lightning_logs/
 .DS_Store
 logs/
 checkpoint/
+outputs/
+sagemaker-deploy/dgmr/*
+!sagemaker-deploy/dgmr/*.py
+
